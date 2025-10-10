@@ -1,0 +1,3 @@
+# Loop closures detected using BoW
+# Format: image_i image_j similarity_score
+340 605 0.4472

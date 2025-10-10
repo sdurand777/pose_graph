@@ -1,0 +1,134 @@
+Fichiers créés pour la version 3D du Pose Graph SLAM
+=====================================================
+
+MODULES PRINCIPAUX:
+-------------------
+1. trajectory_3d.py (8.5K)
+   - Génération de trajectoires 3D avec quaternions
+   - genTraj3D(): U-turns avec variations d'altitude
+   - genTrajSpiralHelix3D(): Spirale hélicoïdale
+   - addNoise3D(): Ajout de bruit gaussien en 3D
+   - Conversions quaternion ↔ Euler
+
+2. g2o_io_3d.py (5.3K)
+   - Lecture/écriture de fichiers G2O pour SE(3)
+   - writeOdom3D(): Vertices et edges d'odométrie
+   - writeLoop3D(): Edges de loop closures
+   - readG2o3D(): Parse les résultats optimisés
+   - Format: VERTEX_SE3:QUAT et EDGE_SE3:QUAT
+
+3. visualization_3d.py (8.8K)
+   - Visualisation 3D interactive avec matplotlib
+   - draw3D(): Trajectoire unique avec flèches d'orientation
+   - drawTwo3D(): Ground truth vs optimized
+   - drawThree3D(): Ground truth vs optimized vs noisy
+   - plotErrors3D(): Graphiques d'erreurs par pose
+   - set_axes_equal(): Ratio d'aspect égal pour axes 3D
+
+4. metrics_3d.py (6.3K)
+   - Calcul des métriques d'erreur en 3D
+   - compute_pose_errors_3d(): Distance euclidienne 3D + distance géodésique SO(3)
+   - print_metrics_comparison_3d(): Affichage formaté des résultats
+   - Métriques en radians et degrés
+
+5. pose_graph_3d.py (183 bytes)
+   - Wrapper pour l'optimisation g2o
+   - optimize3D(): Exécute g2o sur noise_3d.g2o
+
+6. main_3d.py (5.6K)
+   - Point d'entrée principal pour le système 3D
+   - Pipeline complet: génération → bruit → optimisation → métriques → visualisation
+   - Arguments en ligne de commande identiques à la version 2D
+   - Support pour trajectoires 'uturn' et 'helix'
+
+FICHIERS DE TEST ET DOCUMENTATION:
+-----------------------------------
+7. test_3d.py (3.5K)
+   - Suite de tests pour valider tous les composants
+   - Vérifie génération de trajectoires
+   - Vérifie ajout de bruit
+   - Vérifie format G2O
+   - Pas besoin de g2o installé pour les tests
+
+8. README_3D.md (11K)
+   - Documentation complète en français
+   - Guide d'utilisation avec exemples
+   - Description de tous les modules
+   - Comparaison avec la version 2D
+   - Explications mathématiques (SE(3), quaternions)
+   - Guide de dépannage
+
+9. COMPARISON_2D_3D.md (12K)
+   - Comparaison détaillée 2D vs 3D
+   - Tableaux de correspondance des modules
+   - Différences mathématiques
+   - Exemples de code côte à côte
+   - Guide de conversion 2D → 3D
+
+10. FILES_3D.txt (ce fichier)
+    - Liste récapitulative de tous les fichiers
+
+FICHIERS GÉNÉRÉS À L'EXÉCUTION:
+--------------------------------
+- noise_3d.g2o: Graphe de poses avec bruit et loop closures
+- opt_3d.g2o: Graphe optimisé par g2o
+
+TOTAL:
+------
+- 6 modules Python (.py)
+- 1 script de test (.py)
+- 3 fichiers de documentation (.md, .txt)
+- ~62 KB de code et documentation
+
+UTILISATION:
+------------
+# Test rapide (sans optimisation)
+python test_3d.py
+
+# Exécution complète avec visualisation
+python main_3d.py --seed 42
+
+# Sans visualisation (plus rapide)
+python main_3d.py --seed 42 --no-viz
+
+# Trajectoire hélicoïdale
+python main_3d.py --trajectory-type helix --seed 42
+
+# Avec bruit élevé
+python main_3d.py --noise-sigma 0.1 --seed 42
+
+DÉPENDANCES:
+------------
+- numpy
+- scipy (pour Rotation et quaternions)
+- matplotlib (avec support 3D)
+- g2o (optimiseur externe, doit être installé séparément)
+
+CORRESPONDANCE AVEC VERSION 2D:
+--------------------------------
+2D                    →  3D
+-------------------      -------------------
+main.py               →  main_3d.py
+trajectory.py         →  trajectory_3d.py
+g2o_io.py             →  g2o_io_3d.py
+visualization.py      →  visualization_3d.py
+metrics.py            →  metrics_3d.py
+pose_graph.py         →  pose_graph_3d.py
+noise.g2o             →  noise_3d.g2o
+opt.g2o               →  opt_3d.g2o
+
+DIFFÉRENCES CLÉS:
+-----------------
+- Poses: (x, y, θ) → (x, y, z, qx, qy, qz, qw)
+- Espace: SE(2) → SE(3)
+- Format G2O: VERTEX_SE2 → VERTEX_SE3:QUAT
+- Matrices: 3×3 → 4×4
+- Info matrix: 6 valeurs → 21 valeurs
+- Plots: 2D → 3D interactifs
+
+ARCHITECTURE MODULAIRE:
+-----------------------
+Tous les modules suivent la même structure que la version 2D,
+permettant une comparaison facile et un apprentissage progressif
+de 2D vers 3D.
+
