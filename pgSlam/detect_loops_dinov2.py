@@ -243,6 +243,8 @@ def main():
                        help='Maximum number of pairs to display')
     parser.add_argument('--plot-distribution', action='store_true',
                        help='Plot similarity score distribution')
+    parser.add_argument('--max-images', type=int, default=None,
+                       help='Limit detection to first N images (e.g., 400)')
 
     args = parser.parse_args()
 
@@ -262,6 +264,15 @@ def main():
     image_dir = data.get('image_dir', 'scenario/imgs')
 
     print(f"Loaded features for {len(features_dict)} images")
+
+    # Limit to first N images if specified
+    if args.max_images is not None and args.max_images < len(features_dict):
+        sorted_names = sorted(features_dict.keys())
+        selected_names = sorted_names[:args.max_images]
+        features_dict = {name: features_dict[name] for name in selected_names}
+        print(f"Limited to first {args.max_images} images")
+
+    print(f"Using {len(features_dict)} images for loop detection")
     print(f"Model size: {model_size}, Feature dimension: {feature_dim}")
 
     # Compute similarity matrix
@@ -308,6 +319,8 @@ def main():
     print("SUMMARY")
     print("="*60)
     print(f"Total images: {len(image_names)}")
+    if args.max_images is not None:
+        print(f"Limited to: {args.max_images} images")
     print(f"Model size: {model_size}")
     print(f"Feature dimension: {feature_dim}")
     print(f"Similarity threshold: {args.similarity_threshold}")
