@@ -38,6 +38,9 @@ show_help() {
     echo "  USE_CPU        - Forcer CPU même en mode GPU (export USE_CPU=1)"
     echo "  BATCH_SIZE     - Nombre de paires par batch (default: 1)"
     echo "  MAX_PAIRS      - Limiter le nombre de paires à traiter (pour tests)"
+    echo "  FILTER_LOOPS   - Filtrer et copier les loops validées (export FILTER_LOOPS=1)"
+    echo "  OUTPUT_FOLDER  - Dossier pour images validées (défaut: validated_loops)"
+    echo "  MIN_CONFIDENCE - Seuil pour filtrage (défaut: utilise CONF_THRESHOLD)"
     echo ""
     echo "Exemples:"
     echo "  $0 basic"
@@ -48,6 +51,8 @@ show_help() {
     echo "  BATCH_SIZE=4 $0 accurate         # Batch de 4 paires"
     echo "  MAX_PAIRS=10 $0 basic            # Tester sur 10 paires seulement"
     echo "  $0 cpu                           # Mode CPU explicite"
+    echo "  FILTER_LOOPS=1 $0 accurate       # Estimation + filtrage automatique"
+    echo "  FILTER_LOOPS=1 MIN_CONFIDENCE=0.7 $0 custom  # Filtrage avec seuil 0.7"
     echo ""
 }
 
@@ -63,13 +68,18 @@ fi
 
 # Dossier contenant les images (query_*.jpg et loop_*.jpg)
 # Vous pouvez aussi définir cette variable dans votre terminal: export IMAGE_FOLDER=/path/to/images
-IMAGE_FOLDER="${IMAGE_FOLDER:-/home/ivm/MegaLoc/loop_pairs/good_loops}"
+IMAGE_FOLDER="${IMAGE_FOLDER:-/home/ivm/loc/loop_pairs/bad_loops}"
 
 # Fichier CSV de sortie
 OUTPUT_CSV="${OUTPUT_CSV:-loop_poses.csv}"
 
 # Modèle à utiliser (ne changez que si vous avez un modèle local)
 MODEL="${MODEL:-facebook/map-anything}"
+
+# Filtrage automatique des loops validées
+FILTER_LOOPS="${FILTER_LOOPS:-0}"
+OUTPUT_FOLDER="${OUTPUT_FOLDER:-validated_loops}"
+LIST_FILE="${LIST_FILE:-validated_loops.txt}"
 
 # =============================================================================
 # NE MODIFIEZ PAS EN DESSOUS SAUF SI VOUS SAVEZ CE QUE VOUS FAITES
@@ -101,6 +111,12 @@ echo -e "Mode:              ${BLUE}$MODE${NC}"
 echo -e "Dossier d'images:  ${BLUE}$IMAGE_FOLDER${NC}"
 echo -e "Fichier de sortie: ${BLUE}$OUTPUT_CSV${NC}"
 echo -e "Modèle:            ${BLUE}$MODEL${NC}"
+if [[ "$FILTER_LOOPS" == "1" ]]; then
+    echo -e "Filtrage:          ${GREEN}ACTIVÉ${NC}"
+    echo -e "Dossier validées:  ${BLUE}$OUTPUT_FOLDER${NC}"
+else
+    echo -e "Filtrage:          ${YELLOW}DÉSACTIVÉ${NC} (utilisez FILTER_LOOPS=1 pour activer)"
+fi
 echo ""
 
 # Construire la commande selon le mode
@@ -121,70 +137,85 @@ if [[ -n "$MAX_PAIRS" ]]; then
     PYTHON_CMD="$PYTHON_CMD --max_pairs $MAX_PAIRS"
 fi
 
+# Déterminer le seuil de confiance
+# Si CONF_THRESHOLD est défini par l'utilisateur, l'utiliser prioritairement
+if [[ -n "$CONF_THRESHOLD" ]]; then
+    THRESHOLD="$CONF_THRESHOLD"
+    THRESHOLD_SOURCE="utilisateur"
+else
+    # Sinon utiliser le seuil par défaut du mode
+    case "$MODE" in
+        fast) THRESHOLD="0.3" ;;
+        accurate) THRESHOLD="0.6" ;;
+        memory-save|apache|cpu) THRESHOLD="0.5" ;;
+        custom) THRESHOLD="0.5" ;;
+        basic) THRESHOLD="" ;;  # Pas de seuil en mode basic
+    esac
+    THRESHOLD_SOURCE="mode $MODE"
+fi
+
 case "$MODE" in
     basic)
         echo -e "${YELLOW}Mode BASIC: Estimation simple sans filtrage${NC}"
-        echo "  - Pas de seuil de confiance"
+        if [[ -n "$THRESHOLD" ]]; then
+            echo "  - Seuil de confiance: $THRESHOLD (défini par $THRESHOLD_SOURCE)"
+        else
+            echo "  - Pas de seuil de confiance"
+        fi
         echo "  - Inférence standard (rapide)"
         echo "  - Modèle CC-BY-NC 4.0"
         echo ""
-        # Commande par défaut, pas d'options supplémentaires
         ;;
 
     fast)
         echo -e "${YELLOW}Mode FAST: Rapide avec filtrage léger${NC}"
-        echo "  - Seuil de confiance: 0.3 (garde la plupart des loops)"
+        echo "  - Seuil de confiance: $THRESHOLD (défini par $THRESHOLD_SOURCE)"
         echo "  - Inférence standard (rapide)"
         echo "  - Modèle CC-BY-NC 4.0"
         echo ""
-        PYTHON_CMD="$PYTHON_CMD --confidence_threshold 0.3"
         ;;
 
     accurate)
         echo -e "${YELLOW}Mode ACCURATE: Précis avec filtrage strict${NC}"
-        echo "  - Seuil de confiance: 0.6 (ne garde que les bonnes loops)"
+        echo "  - Seuil de confiance: $THRESHOLD (défini par $THRESHOLD_SOURCE)"
         echo "  - Inférence standard"
         echo "  - Modèle CC-BY-NC 4.0"
         echo ""
-        PYTHON_CMD="$PYTHON_CMD --confidence_threshold 0.6"
         ;;
 
     memory-save)
         echo -e "${YELLOW}Mode MEMORY-SAVE: Économe en mémoire${NC}"
         echo "  - Inférence économe en mémoire (plus lent mais utilise moins de VRAM)"
-        echo "  - Seuil de confiance: 0.5"
+        echo "  - Seuil de confiance: $THRESHOLD (défini par $THRESHOLD_SOURCE)"
         echo "  - Recommandé pour: grandes images, GPU avec peu de VRAM"
         echo ""
-        PYTHON_CMD="$PYTHON_CMD --memory_efficient --confidence_threshold 0.5"
+        PYTHON_CMD="$PYTHON_CMD --memory_efficient"
         ;;
 
     apache)
         echo -e "${YELLOW}Mode APACHE: Modèle Apache 2.0${NC}"
         echo "  - Utilise facebook/map-anything-apache"
         echo "  - Licence Apache 2.0 (usage commercial autorisé)"
-        echo "  - Seuil de confiance: 0.5"
+        echo "  - Seuil de confiance: $THRESHOLD (défini par $THRESHOLD_SOURCE)"
         echo ""
-        PYTHON_CMD="$PYTHON_CMD --apache --confidence_threshold 0.5"
+        PYTHON_CMD="$PYTHON_CMD --apache"
         ;;
 
     cpu)
         echo -e "${YELLOW}Mode CPU: Force l'utilisation du CPU${NC}"
         echo "  - ⚠️  TRÈS LENT: 10-50x plus lent que GPU"
         echo "  - Utilise uniquement le CPU (pas de CUDA requis)"
-        echo "  - Seuil de confiance: 0.5"
+        echo "  - Seuil de confiance: $THRESHOLD (défini par $THRESHOLD_SOURCE)"
         echo "  - Utile si: pas de GPU, problèmes CUDA, debugging"
         echo ""
-        PYTHON_CMD="$PYTHON_CMD --confidence_threshold 0.5"
         # --cpu déjà ajouté plus haut
         ;;
 
     custom)
         echo -e "${YELLOW}Mode CUSTOM: Configuration personnalisée${NC}"
-        CONF="${CONF_THRESHOLD:-0.5}"
-        echo "  - Seuil de confiance: $CONF (modifiable via CONF_THRESHOLD)"
+        echo "  - Seuil de confiance: $THRESHOLD (défini par $THRESHOLD_SOURCE)"
         echo "  - Vous pouvez modifier ce mode dans le script"
         echo ""
-        PYTHON_CMD="$PYTHON_CMD --confidence_threshold $CONF"
 
         # Ajoutez vos options personnalisées ici
         # Exemples:
@@ -199,6 +230,11 @@ case "$MODE" in
         exit 1
         ;;
 esac
+
+# Ajouter le seuil de confiance à la commande si défini
+if [[ -n "$THRESHOLD" ]]; then
+    PYTHON_CMD="$PYTHON_CMD --confidence_threshold $THRESHOLD"
+fi
 
 # Afficher la commande qui va être exécutée
 echo -e "${BLUE}Commande:${NC}"
@@ -227,9 +263,56 @@ if [ $? -eq 0 ]; then
     echo -e "${GREEN}==================================================================${NC}"
     echo -e "Résultats sauvegardés dans: ${BLUE}$OUTPUT_CSV${NC}"
     echo ""
+
+    # Filtrage automatique si activé
+    if [[ "$FILTER_LOOPS" == "1" ]]; then
+        echo -e "${BLUE}==================================================================${NC}"
+        echo -e "${BLUE}🔍 Filtrage des loops validées${NC}"
+        echo -e "${BLUE}==================================================================${NC}"
+
+        # Déterminer le seuil de confiance pour le filtrage
+        # Si MIN_CONFIDENCE est défini, l'utiliser, sinon utiliser le seuil d'estimation
+        if [[ -n "$MIN_CONFIDENCE" ]]; then
+            FILTER_THRESHOLD="$MIN_CONFIDENCE"
+            FILTER_SOURCE="MIN_CONFIDENCE"
+        elif [[ -n "$THRESHOLD" ]]; then
+            FILTER_THRESHOLD="$THRESHOLD"
+            FILTER_SOURCE="seuil d'estimation"
+        else
+            FILTER_THRESHOLD="0.0"
+            FILTER_SOURCE="défaut (pas de filtrage)"
+        fi
+
+        echo -e "Seuil de filtrage: ${BLUE}$FILTER_THRESHOLD${NC} (source: $FILTER_SOURCE)"
+        echo ""
+
+        # Lancer le filtrage
+        python scripts/filter_validated_loops.py \
+            --csv "$OUTPUT_CSV" \
+            --image_folder "$IMAGE_FOLDER" \
+            --output_folder "$OUTPUT_FOLDER" \
+            --min_confidence "$FILTER_THRESHOLD" \
+            --list_file "$LIST_FILE"
+
+        if [ $? -eq 0 ]; then
+            echo ""
+            echo -e "${GREEN}✅ Filtrage terminé${NC}"
+            echo -e "Images validées: ${BLUE}$OUTPUT_FOLDER/${NC}"
+            echo -e "Liste texte:     ${BLUE}$LIST_FILE${NC}"
+            echo ""
+        else
+            echo ""
+            echo -e "${YELLOW}⚠️  Erreur lors du filtrage (estimation OK)${NC}"
+            echo ""
+        fi
+    fi
+
     echo "Pour analyser les résultats:"
     echo "  - Ouvrir le CSV dans Excel/LibreOffice"
     echo "  - Ou utiliser Python/pandas pour une analyse plus poussée"
+    if [[ "$FILTER_LOOPS" == "1" ]]; then
+        echo "  - Images validées disponibles dans: $OUTPUT_FOLDER/"
+    fi
     echo ""
 else
     echo ""
