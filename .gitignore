@@ -1,0 +1,30 @@
+# Image files
+*.jpg
+*.jpeg
+*.JPG
+*.JPEG
+*.png
+*.PNG
+
+# Python virtual environments
+*_env/
+venv/
+env/
+.venv/
+
+# Generated data and results
+scripts_mapanything/good_loops/
+scripts_mapanything/validated_loops/
+scripts_mapanything/loop_poses.csv
+scripts_mapanything/validated_loops.txt
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg-info/
+dist/
+build/
